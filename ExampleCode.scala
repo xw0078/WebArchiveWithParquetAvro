@@ -58,7 +58,7 @@ val filtered = RecordLoader.loadArchives(warcPath, sc).keepUrlPatterns(URLs.toSe
 
 /************************************************
   Topic Modeling
-  Reference: 
+  Reference Link: https://databricks-prod-cloudfront.cloud.databricks.com/public/4027ec902e239c93eaaa8714f173bcfc/3741049972324885/3783546674231782/4413065072037724/latest.html
 ************************************************/  
 // extract puretext
 val puretext = df.withColumn("puretext",text_extractorUDF($"payload")).select("puretext") // Parquet,Avro
