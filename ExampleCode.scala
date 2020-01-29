@@ -1,4 +1,10 @@
 /************************************************
+  ArchiveSpark (AS, WARC-CDX experiments) Version: 2.7.6
+  ArchiveUnleashedToolkit (AUT, WARC experiments) Version: 0.17
+************************************************/
+
+
+/************************************************
   Parquet/Avro File Writing and Configurations
 ************************************************/
 sqlContext.setConf("parquet.dictionary.page.size", "5242880")
@@ -30,7 +36,7 @@ val records = RecordLoader.loadArchives(warcPath, sc)
 ************************************************/  
 // Parquet,Avro
 val count = df.count
-// AS / AUT
+// AS / AUT 
 val count = records.count
 
 /************************************************
