@@ -5,22 +5,69 @@
 
 
 /************************************************
-  Parquet/Avro File Writing and Configurations
+  Parquet/Avro File Generation and Configurations
 ************************************************/
+
+// Generate Parquet file from WARC with customized AUT
+val AUT_conversion_schema = StructType( // master schema for AU convertion
+      List(
+        StructField(name = "key", dataType = StringType, nullable = false),
+        StructField(name = "surtUrl", dataType = StringType, nullable = false),
+        StructField(name = "timestamp", dataType = StringType, nullable = false), 
+        StructField(name = "originalUrl", dataType = StringType, nullable = false),
+        StructField(name = "mime", dataType = StringType, nullable = false),
+        StructField(name = "status", dataType = StringType, nullable = false),
+        StructField(name = "digest", dataType = StringType, nullable = false),
+        StructField(name = "redirectUrl", dataType = StringType, nullable = false),
+        StructField(name = "meta", dataType = StringType, nullable = false),
+        StructField(name = "contentLength", dataType = LongType, nullable = false),
+        StructField(name = "offset", dataType = LongType, nullable = false),
+        StructField(name = "filename", dataType = StringType, nullable = false),
+        StructField(name = "allheader", dataType = StringType, nullable = false),
+        StructField(name = "payload", dataType = StringType, nullable = false)
+    )
+)
+
+// parquet writing conf
 sqlContext.setConf("parquet.dictionary.page.size", "5242880")
 sqlContext.setConf("parquet.block.size", "33554432")
-sqlContext.setConf("parquet.filter.statistics.enabled", "true") // ensures predicate pushdown
-sqlContext.setConf("parquet.filter.dictionary.enabled", "true") // ensures predicate pushdown
-sqlContext.setConf("spark.sql.parquet.outputTimestampType", "TIMESTAMP_MILLIS") // ensures predicate pushdown 
+sqlContext.setConf("parquet.filter.statistics.enabled", "true") 
+sqlContext.setConf("parquet.filter.dictionary.enabled", "true") 
+sqlContext.setConf("spark.sql.parquet.outputTimestampType", "TIMESTAMP_MILLIS") // ensures correct timestamp format with predicate pushdown
 sqlContext.setConf("spark.sql.parquet.enableVectorizedReader", "false")
-// Parquet
-data.sort("timestamp").coalesce(1).write.format("parquet")
-    .option("compression","gzip").mode("overwrite").save("destination_path")
-// Avro
-data.sort("timestamp").coalesce(1).write.format("avro")
+
+// use AUT to convert WARC to Parquet/Avro
+val warc_rdd = { RecordLoader.loadArchives(warcPath, sc)
+            .map(r => Row((r.getSurt+r.getOffset.toString+outFileName),r.getSurt,r.getCrawlDate,r.getUrl,r.getMimeType,r.getHttpStatus,NulltoString(r.getDigest),r.getRedirect,r.getMeta,r.getLength,r.getOffset,outFileName,NulltoString(r.getHeaderFields),NulltoString(r.getContentString)))
+            }
+val warc_df = sqlContext.createDataFrame(all_rdd,AUT_conversion_schema)
+warc_df.coalesce(1).write.format("parquet").option("compression","gzip").mode("overwrite").save(outPath)
+
+
+// note that AUT "r.getCrawlDate" function does not extract exact unix timestamp from the WARC, 
+// for our experiments, we decide to extract the accurate timestamp from the WARC header as an addtion step so that we can get the timestamp type column.
+// (this step can be optimized through modifying AUT to reduce multiple conversions)
+val fixTimestamp = (s:String) => {
+    if (s != null){
+        //print(s.getClass.toString)
+        val Pattern = "(2018-05-.*)".r
+        Pattern.findFirstIn(s).getOrElse("null").replace("T"," ").replace("Z","")
+    }
+    else{
+        "null"
+    }
+}
+val fixTimestampUDF = udf(fixTimestamp)
+val parquetDf =  spark.read.format("parquet").schema(AU_conversion_schema).load("source path")
+val fixedDf = parquetDf.withColumn("timestamp",fixTimestampUDF(col("allheader"))).withColumn("timestamp",unix_timestamp($"timestamp", "yyyy-MM-dd HH:mm:ss").cast(TimestampType).as("timestamp"))
+fixedDf.coalesce(1).write.format("parquet").option("compression","gzip").mode("overwrite").save("destination path")
+
+// Avro Conversion instead of Parquet
+data.coalesce(1).write.format("avro")
     .option("compression","gzip").mode("overwrite").save("destination_path")
     
 /************************************************
+  Workload Part
   Data loading
 ************************************************/    
 // Parquet / Avro
@@ -47,7 +94,7 @@ val filtered = df.filter(col("timestamp") > unix_timestamp(lit(timeFrom)).cast("
 val filtered = df.withColumn("timestampStr",unix_timestamp($"timestampStr", "yyyy-MM-dd HH:mm:ss").cast("timestamp")).filter(col("timestampStr") > unix_timestamp(lit(timeFrom)).cast("timestamp") && col("timestampStr") < unix_timestamp(lit(timeTo)).cast("timestamp")) // string timestamp without predicate pushdown
 // AS
 val filtered = records.filter(r => r.time.isAfter(timeFrom) && r.time.isBefore(timeTo)).enrich(StringContent)
-// AU: AU only provides for year,month,day filtering
+// AUT: AUT only provides for year,month,day filtering
 val filtered = RecordLoader.loadArchives(warcPath, sc).keepDate(List(time),ExtractDate.DateComponent.YYYYMMDD)
 
 /************************************************
