@@ -3,6 +3,30 @@
   ArchiveUnleashedToolkit (AUT, WARC experiments) Version: 0.17
 ************************************************/
 
+/************************************************
+  Dependencies
+************************************************/
+
+import java.lang.System.nanoTime
+import scala.math.pow
+import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
+import scala.util.Try
+import org.apache.spark.sql.types.{StringType, StructField, StructType,IntegerType,LongType}
+import java.io.{FileOutputStream, PrintStream}
+import java.lang.System.nanoTime
+import java.time.LocalDateTime
+import org.apache.spark.sql.Row
+import scala.io.Source
+import scala.math.pow
+import scala.util.control.Breaks._
+import java.lang.System.nanoTime
+import scala.math.pow
+import org.apache.spark.sql.DataFrameWriter
+
+import java.util.regex.Pattern
+import io.archivesunleashed._
+import io.archivesunleashed.matchbox._
 
 /************************************************
   Parquet/Avro File Generation and Configurations
@@ -37,6 +61,14 @@ sqlContext.setConf("spark.sql.parquet.outputTimestampType", "TIMESTAMP_MILLIS") 
 sqlContext.setConf("spark.sql.parquet.enableVectorizedReader", "false")
 
 // use AUT to convert WARC to Parquet/Avro
+def NulltoString(n: Any): String = {
+  if (n == null) {
+    "-"
+  } else {
+    n.toString
+  }
+}
+
 val warc_rdd = { RecordLoader.loadArchives(warcPath, sc)
             .map(r => Row((r.getSurt+r.getOffset.toString+outFileName),r.getSurt,r.getCrawlDate,r.getUrl,r.getMimeType,r.getHttpStatus,NulltoString(r.getDigest),r.getRedirect,r.getMeta,r.getLength,r.getOffset,outFileName,NulltoString(r.getHeaderFields),NulltoString(r.getContentString)))
             }
